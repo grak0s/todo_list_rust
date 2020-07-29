@@ -1,3 +1,4 @@
+
 use crate::models::{TodoList, TodoItem};
 use deadpool_postgres::Client;
 use tokio_pg_mapper::FromTokioPostgresRow;
@@ -26,3 +27,30 @@ pub async fn get_items(client:&Client, list_id: i32)->Result<Vec<TodoItem>,io::E
 
     Ok(items)
 }
+
+pub async fn create_todo(client: &Client,title:String)-> Result<TodoList, io::Error>{
+    let statement= client.prepare("insert into todo_list (title) values ($1) returning id, title").await.unwrap();
+
+    client.query(&statement,&[&title])
+        .await
+        .expect("Error getting todo list")
+        .iter()
+        .map(|row| TodoList::from_row_ref(row).unwrap())
+        .collect::<Vec<TodoList>>()
+        .pop()
+        .ok_or(io::Error::new(io::ErrorKind::Other, "Error creating todo list"))
+}
+
+pub async fn check_item(client:&Client, list_id:i32, item_id:i32)-> Result<(), io::Error>{
+    let statement= client.prepare("update todo_item set checked = true  where list_id =$1 and id = $2 and checked = false ").await.unwrap();
+
+    let result = client.execute(&statement, &[&list_id,&item_id])
+        .await
+        .expect("error cheking todo item");
+
+    match result{
+        ref update if *update ==1 =>Ok(()),
+        _ =>Err(io::Error::new(io::ErrorKind::Other, "Falied to checki  item"))
+    }
+}
+
